@@ -42,6 +42,12 @@ func Provider() terraform.ResourceProvider {
 				DefaultFunc: schema.EnvDefaultFunc("esxi_password", "unset"),
 				Description: "esxi ssh password.",
 			},
+			"esxi_ssh_known_hosts": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("esxi_ssh_known_hosts", "unset"),
+				Description: "ssh known_hosts file for host authentication.",
+			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
 			"esxi_guest":         resourceGUEST(),
@@ -58,6 +64,7 @@ func configureProvider(d *schema.ResourceData) (interface{}, error) {
 		esxiHostPort: d.Get("esxi_hostport").(string),
 		esxiUserName: d.Get("esxi_username").(string),
 		esxiPassword: d.Get("esxi_password").(string),
+		knownHosts:   d.Get("esxi_ssh_known_hosts").(string),
 	}
 
 	if err := config.validateEsxiCreds(); err != nil {

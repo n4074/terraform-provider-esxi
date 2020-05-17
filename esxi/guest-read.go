@@ -130,7 +130,7 @@ func guestREAD(c *Config, vmid string, guest_startup_timeout int) (string, strin
 	//
 	//  Read vmx file into memory to read settings
 	//
-	//      -Get location of vmx file on esxi host
+	//	  -Get location of vmx file on esxi host
 	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
 	stdout, err = runRemoteSshCommand(c, remote_cmd, "get dst_vmx_ds")
 	dst_vmx_ds = stdout

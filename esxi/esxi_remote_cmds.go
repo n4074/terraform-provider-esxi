@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/tmc/scp"
 	"golang.org/x/crypto/ssh"
+	kh "golang.org/x/crypto/ssh/knownhosts"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,18 +19,26 @@ func connectToHost(c *Config, attempt int) (*ssh.Client, *ssh.Session, error) {
 		User: c.esxiUserName,
 		Auth: []ssh.AuthMethod{
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
-				// Reply password to all questions
-				answers := make([]string, len(questions))
-				for i, _ := range answers {
-					answers[i] = c.esxiPassword
-				}
+					// Reply password to all questions
+					answers := make([]string, len(questions))
+					for i, _ := range answers {
+						answers[i] = c.esxiPassword
+					}
 
-				return answers, nil
-			}),
+					return answers, nil
+				}),
 		},
 	}
 
 	sshConfig.HostKeyCallback = ssh.InsecureIgnoreHostKey()
+
+	if c.knownHosts != "" {
+		var err error
+		sshConfig.HostKeyCallback, err = kh.New(c.knownHosts)
+		if err != nil {
+			return nil, nil, fmt.Errorf("SSH Known Hosts Error: %v", err)
+		}
+	}
 
 	esxi_hostandport := fmt.Sprintf("%s:%s", c.esxiHostName, c.esxiHostPort)
 
@@ -37,6 +46,7 @@ func connectToHost(c *Config, attempt int) (*ssh.Client, *ssh.Session, error) {
 	for attempt > 0 {
 		client, err := ssh.Dial("tcp", esxi_hostandport, sshConfig)
 		if err != nil {
+			log.Printf("[runRemoteSshCommand] Connection Failed: %v\n", err)
 			log.Printf("[runRemoteSshCommand] Retry connection: %d\n", attempt)
 			attempt -= 1
 			time.Sleep(1 * time.Second)
@@ -45,7 +55,7 @@ func connectToHost(c *Config, attempt int) (*ssh.Client, *ssh.Session, error) {
 			session, err := client.NewSession()
 			if err != nil {
 				client.Close()
-				return nil, nil, fmt.Errorf("Session Connection Error")
+				return nil, nil, fmt.Errorf("Session Connection Error: Retries Exceeded")
 			}
 
 			return client, session, nil

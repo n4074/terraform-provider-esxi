@@ -10,6 +10,7 @@ type Config struct {
 	esxiHostPort string
 	esxiUserName string
 	esxiPassword string
+	knownHosts   string
 }
 
 func (c *Config) validateEsxiCreds() error {

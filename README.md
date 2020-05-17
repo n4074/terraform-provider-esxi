@@ -148,6 +148,8 @@ Configuration reference
   * esxi_hostport - Optional - Default "22".
   * esxi_username - Optional - Default "root".
   * esxi_password - Required
+  * esxi_password - Required
+  * esxi_ssh_known_hosts - Optional - Path to a known_hosts file used to authenticate hosts.
 
 
 * resource "esxi_resource_pool"

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
-	"regexp"
+	"bufio"
+	//"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -26,7 +26,7 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 
 	var memsize, numvcpus, virthwver int
 	var boot_disk_vmdkPATH, remote_cmd, vmid, stdout, vmx_contents string
-	var osShellCmd, osShellCmdOpt string
+	//var osShellCmd, osShellCmdOpt string
 	var out bytes.Buffer
 	var err error
 	var is_ovf_properties bool
@@ -217,88 +217,81 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 		if boot_disk_type == "zeroedthick" {
 			boot_disk_type = "thick"
 		}
-		password := url.QueryEscape(c.esxiPassword)
-		dst_path := fmt.Sprintf("vi://%s:%s@%s/%s", c.esxiUserName, password, c.esxiHostName, resource_pool_name)
+		//password := url.QueryEscape(c.esxiPassword)
+		dst_path := fmt.Sprintf("vi://%s@%s/%s", c.esxiUserName, c.esxiHostName, resource_pool_name)
 
-		net_param := ""
+	    params := []string{
+			"--acceptAllEulas",
+			"--machineOutput",
+            "--noSSLVerify",
+			"--X:useMacNaming=false",
+			"--overwrite",
+			"-dm=" + boot_disk_type,
+            "-ds=" + disk_store,
+            "--name=" + guest_name,
+		}
+         	
+	//	net_param := ""
 		if (strings.HasSuffix(src_path, ".ova") || strings.HasSuffix(src_path, ".ovf")) && virtual_networks[0][0] != "" {
-			net_param = " --network='" + virtual_networks[0][0] + "'"
+			params = append(params, "--network='" + virtual_networks[0][0] + "'")
 		}
 
-		extra_params := ""
 		if (len(ovf_properties) > 0) && (strings.HasSuffix(src_path, ".ova") || strings.HasSuffix(src_path, ".ovf")) {
 			is_ovf_properties = true
 			// in order to process any OVF params, guest should be immediately powered on
 			// This is because the ESXi host doesn't have a cache to store the OVF parameters, like the vCenter Server does.
 			// Therefore, you MUST use the ‘--X:injectOvfEnv’ option with the ‘--poweron’ option
-			extra_params = "--X:injectOvfEnv --allowExtraConfig --powerOn "
+			params = append(params, "--X:injectOvfEnv", "--allowExtraConfig", "--powerOn")
 
 			for ovf_prop_key, ovf_prop_value := range ovf_properties {
-				extra_params = fmt.Sprintf("%s --prop:%s='%s' ", extra_params, ovf_prop_key, ovf_prop_value)
+				//extra_params = fmt.Sprintf("%s --prop:%s='%s' ", extra_params, ovf_prop_key, ovf_prop_value)
+				params = append(params, fmt.Sprintf("--prop:%s='%s'", ovf_prop_key, ovf_prop_value))
 			}
-			log.Println("[guestCREATE] ovf_properties extra_params: " + extra_params)
 		}
 
-		ovf_cmd := fmt.Sprintf("ovftool --acceptAllEulas --noSSLVerify --X:useMacNaming=false %s "+
-			"-dm=%s --name='%s' --overwrite -ds='%s' %s '%s' '%s'", extra_params, boot_disk_type, guest_name, disk_store, net_param, src_path, dst_path)
+		params = append(params, src_path, dst_path)
 
+		linesep := "\n"
 		if runtime.GOOS == "windows" {
-			osShellCmd = "cmd.exe"
-			osShellCmdOpt = "/c"
-
-			ovf_cmd = strings.Replace(ovf_cmd, "'", "\"", -1)
-
-			var ovf_bat = "ovf_cmd.bat"
-
-			_, err = os.Stat(ovf_bat)
-
-			// delete file if exists
-			if os.IsExist(err) {
-				err = os.Remove(ovf_bat)
-				if err != nil {
-					return "", fmt.Errorf("Unable to delete %s: %s\n", ovf_bat, err.Error())
-				}
-			}
-
-			//  create new batch file
-			file, err := os.Create(ovf_bat)
-			if err != nil {
-				return "", fmt.Errorf("Unable to create %s: %s\n", ovf_bat, err.Error())
-				defer file.Close()
-			}
-
-			_, err = file.WriteString(strings.Replace(ovf_cmd, "%", "%%", -1))
-			if err != nil {
-				return "", fmt.Errorf("Unable to write to %s: %s\n", ovf_bat, err.Error())
-				defer file.Close()
-			}
-
-			err = file.Sync()
-			defer file.Close()
-			ovf_cmd = ovf_bat
-
-		} else {
-			osShellCmd = "/bin/bash"
-			osShellCmdOpt = "-c"
+			linesep = "\r\n"
 		}
 
-		//  Execute ovftool script (or batch) here.
-		cmd := exec.Command(osShellCmd, osShellCmdOpt, ovf_cmd)
+		cmd := exec.Command("ovftool", params...)
 
-		re := regexp.MustCompile(`vi://.*?@`)
-		log.Printf("[guestCREATE] ovf_cmd: %s\n", re.ReplaceAllString(ovf_cmd, "vi://XXXX:YYYY@"))
+		log.Printf("[guestCREATE] ovf_cmd: ovftool %s\n", strings.Join(params, " "))
+		cmdin, err := cmd.StdinPipe()
 
-		cmd.Stdout = &out
+		if err != nil {
+			return "", fmt.Errorf("There was an ovftool Error: could not create ovftool stdin pipe\n", err.Error())
+		}
+
+		cmdout, err := cmd.StdoutPipe()
+
+		if err != nil {
+			return "", fmt.Errorf("There was an ovftool Error: could not create ovftool combined output pipe\n", err.Error())
+		}
+		
+		go func() {
+			scanner := bufio.NewScanner(cmdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if line == "+ <authentication type=\"target\">" {
+					cmdin.Write([]byte("PASSWORDTARGET" + linesep + c.esxiPassword + linesep))
+				}
+				log.Printf("[guestCREATE] ovftool output: %s\n", line)
+			}
+		}()
+
 		err = cmd.Run()
 		log.Printf("[guestCREATE] ovftool output: %q\n", out.String())
 
 		if err != nil {
-			log.Printf("[guestCREATE] Failed, There was an ovftool Error: %s\n%s\n", out.String(), err.Error())
+			log.Printf("[guestCREATE] Failed, There was an ovftool error: %s\n%s\n", out.String(), err.Error())
 			return "", fmt.Errorf("There was an ovftool Error: %s\n%s\n", out.String(), err.Error())
 		}
 	}
 
-	// get VMID (by name)
+	// get VMID (by name)236gg
 	vmid, err = guestGetVMID(c, guest_name)
 	if err != nil {
 		return "", err

@@ -12,7 +12,6 @@ import (
 //  Validate Disk Store
 //
 func diskStoreValidate(c *Config, disk_store string) error {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[diskStoreValidate]\n")
 
 	var remote_cmd, stdout string
@@ -22,7 +21,7 @@ func diskStoreValidate(c *Config, disk_store string) error {
 	//  Check if Disk Store already exists
 	//
 	remote_cmd = fmt.Sprintf("esxcli storage filesystem list | grep '/vmfs/volumes/.*[VMFS|NFS]' |awk '{for(i=2;i<=NF-5;++i)printf $i\" \" ; printf \"\\n\"}'")
-	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Get list of disk stores")
+	stdout, err = runRemoteSshCommand(c, remote_cmd, "Get list of disk stores")
 	if err != nil {
 		return fmt.Errorf("Unable to get list of disk stores: %s\n", err)
 	}
@@ -30,10 +29,10 @@ func diskStoreValidate(c *Config, disk_store string) error {
 
 	if strings.Contains(stdout, disk_store) == false {
 		remote_cmd = fmt.Sprintf("esxcli storage filesystem rescan")
-		_, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Refresh filesystems")
+		_, _ = runRemoteSshCommand(c, remote_cmd, "Refresh filesystems")
 
 		remote_cmd = fmt.Sprintf("esxcli storage filesystem list | grep '/vmfs/volumes/.*[VMFS|NFS]' |awk '{for(i=2;i<=NF-5;++i)printf $i\" \" ; printf \"\\n\"}'")
-		stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Get list of disk stores")
+		stdout, err = runRemoteSshCommand(c, remote_cmd, "Get list of disk stores")
 		if err != nil {
 			return fmt.Errorf("Unable to get list of disk stores: %s\n", err)
 		}
@@ -51,7 +50,6 @@ func diskStoreValidate(c *Config, disk_store string) error {
 //
 func virtualDiskCREATE(c *Config, virtual_disk_disk_store string, virtual_disk_dir string,
 	virtual_disk_name string, virtual_disk_size int, virtual_disk_type string) (string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[virtualDiskCREATE]")
 
 	var virtdisk_id, remote_cmd string
@@ -69,10 +67,10 @@ func virtualDiskCREATE(c *Config, virtual_disk_disk_store string, virtual_disk_d
 	//  Create dir if required
 	//
 	remote_cmd = fmt.Sprintf("mkdir -p \"/vmfs/volumes/%s/%s\"", virtual_disk_disk_store, virtual_disk_dir)
-	_, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "create virtual disk dir")
+	_, _ = runRemoteSshCommand(c, remote_cmd, "create virtual disk dir")
 
 	remote_cmd = fmt.Sprintf("ls -d \"/vmfs/volumes/%s/%s\"", virtual_disk_disk_store, virtual_disk_dir)
-	_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "validate dir exists")
+	_, err = runRemoteSshCommand(c, remote_cmd, "validate dir exists")
 	if err != nil {
 		return "", errors.New("Unable to create virtual_disk directory.")
 	}
@@ -86,7 +84,7 @@ func virtualDiskCREATE(c *Config, virtual_disk_disk_store string, virtual_disk_d
 	//  Validate if it exists already
 	//
 	remote_cmd = fmt.Sprintf("ls -l \"%s\"", virtdisk_id)
-	_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "validate disk store exists")
+	_, err = runRemoteSshCommand(c, remote_cmd, "validate disk store exists")
 	if err == nil {
 		log.Println("[virtualDiskCREATE]  Already exists.")
 		return virtdisk_id, err
@@ -94,7 +92,7 @@ func virtualDiskCREATE(c *Config, virtual_disk_disk_store string, virtual_disk_d
 
 	remote_cmd = fmt.Sprintf("/bin/vmkfstools -c %dG -d %s \"%s\"", virtual_disk_size,
 		virtual_disk_type, virtdisk_id)
-	_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Create virtual_disk")
+	_, err = runRemoteSshCommand(c, remote_cmd, "Create virtual_disk")
 	if err != nil {
 		return "", errors.New("Unable to create virtual_disk")
 	}
@@ -106,7 +104,6 @@ func virtualDiskCREATE(c *Config, virtual_disk_disk_store string, virtual_disk_d
 //  Grow virtual Disk
 //
 func growVirtualDisk(c *Config, virtdisk_id string, virtdisk_size string) error {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[growVirtualDisk]\n")
 
 	var newDiskSize int
@@ -119,7 +116,7 @@ func growVirtualDisk(c *Config, virtdisk_id string, virtdisk_size string) error 
 
 	if currentDiskSize < newDiskSize {
 		remote_cmd := fmt.Sprintf("/bin/vmkfstools -X %dG \"%s\"", newDiskSize, virtdisk_id)
-		_, err := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "grow disk")
+		_, err := runRemoteSshCommand(c, remote_cmd, "grow disk")
 		if err != nil {
 			return err
 		}
@@ -132,7 +129,6 @@ func growVirtualDisk(c *Config, virtdisk_id string, virtdisk_size string) error 
 //  Read virtual Disk details
 //
 func virtualDiskREAD(c *Config, virtdisk_id string) (string, string, string, int, string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[virtualDiskREAD] Begin")
 
 	var virtual_disk_disk_store, virtual_disk_dir, virtual_disk_name string
@@ -153,7 +149,7 @@ func virtualDiskREAD(c *Config, virtdisk_id string) (string, string, string, int
 
 	// Test if virtual disk exists
 	remote_cmd := fmt.Sprintf("test -s \"%s\"", virtdisk_id)
-	_, err := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "test if virtual disk exists")
+	_, err := runRemoteSshCommand(c, remote_cmd, "test if virtual disk exists")
 	if err != nil {
 		return "", "", "", 0, "", err
 	}
@@ -167,7 +163,7 @@ func virtualDiskREAD(c *Config, virtdisk_id string) (string, string, string, int
 
 	remote_cmd = fmt.Sprintf("ls -l \"/vmfs/volumes/%s/%s/%s\" | awk '{print $5}'",
 		virtual_disk_disk_store, virtual_disk_dir, virtual_disk_nameFlat)
-	flatSize, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Get size")
+	flatSize, err = runRemoteSshCommand(c, remote_cmd, "Get size")
 	if err != nil {
 		return "", "", "", 0, "", err
 	}
@@ -176,13 +172,13 @@ func virtualDiskREAD(c *Config, virtdisk_id string) (string, string, string, int
 
 	// Determine virtual disk type  (only works if Guest is powered off)
 	remote_cmd = fmt.Sprintf("vmkfstools -t0 \"%s\" |grep -q 'VMFS Z- LVID:' && echo true", virtdisk_id)
-	isZeroedThick, _ := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Get disk type.  Is zeroedthick.")
+	isZeroedThick, _ := runRemoteSshCommand(c, remote_cmd, "Get disk type.  Is zeroedthick.")
 
 	remote_cmd = fmt.Sprintf("vmkfstools -t0 \"%s\" |grep -q 'VMFS -- LVID:' && echo true", virtdisk_id)
-	isEagerZeroedThick, _ := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Get disk type.  Is eagerzeroedthick.")
+	isEagerZeroedThick, _ := runRemoteSshCommand(c, remote_cmd, "Get disk type.  Is eagerzeroedthick.")
 
 	remote_cmd = fmt.Sprintf("vmkfstools -t0 \"%s\" |grep -q 'NOMP -- :' && echo true", virtdisk_id)
-	isThin, _ := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Get disk type.  Is thin.")
+	isThin, _ := runRemoteSshCommand(c, remote_cmd, "Get disk type.  Is thin.")
 
 	if isThin == "true" {
 		virtual_disk_type = "thin"

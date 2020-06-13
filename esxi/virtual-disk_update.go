@@ -9,7 +9,6 @@ import (
 
 func resourceVIRTUALDISKUpdate(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
-	//esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[resourceVIRTUALDISKUpdate]")
 
 	if d.HasChange("virtual_disk_size") {

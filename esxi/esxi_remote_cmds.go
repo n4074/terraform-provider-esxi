@@ -12,16 +12,16 @@ import (
 )
 
 // Connect to esxi host using ssh
-func connectToHost(esxiSSHinfo SshConnectionStruct, attempt int) (*ssh.Client, *ssh.Session, error) {
+func connectToHost(c *Config, attempt int) (*ssh.Client, *ssh.Session, error) {
 
 	sshConfig := &ssh.ClientConfig{
-		User: esxiSSHinfo.user,
+		User: c.esxiUserName,
 		Auth: []ssh.AuthMethod{
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
 				// Reply password to all questions
 				answers := make([]string, len(questions))
 				for i, _ := range answers {
-					answers[i] = esxiSSHinfo.pass
+					answers[i] = c.esxiPassword
 				}
 
 				return answers, nil
@@ -31,7 +31,7 @@ func connectToHost(esxiSSHinfo SshConnectionStruct, attempt int) (*ssh.Client, *
 
 	sshConfig.HostKeyCallback = ssh.InsecureIgnoreHostKey()
 
-	esxi_hostandport := fmt.Sprintf("%s:%s", esxiSSHinfo.host, esxiSSHinfo.port)
+	esxi_hostandport := fmt.Sprintf("%s:%s", c.esxiHostName, c.esxiHostPort)
 
 	//attempt := 10
 	for attempt > 0 {
@@ -56,7 +56,7 @@ func connectToHost(esxiSSHinfo SshConnectionStruct, attempt int) (*ssh.Client, *
 }
 
 //  Run any remote ssh command on esxi server and return results.
-func runRemoteSshCommand(esxiSSHinfo SshConnectionStruct, remoteSshCommand string, shortCmdDesc string) (string, error) {
+func runRemoteSshCommand(c *Config, remoteSshCommand string, shortCmdDesc string) (string, error) {
 	log.Println("[runRemoteSshCommand] :" + shortCmdDesc)
 
 	var attempt int
@@ -66,7 +66,7 @@ func runRemoteSshCommand(esxiSSHinfo SshConnectionStruct, remoteSshCommand strin
 	} else {
 		attempt = 10
 	}
-	client, session, err := connectToHost(esxiSSHinfo, attempt)
+	client, session, err := connectToHost(c, attempt)
 	if err != nil {
 		log.Println("[runRemoteSshCommand] Failed err: " + err.Error())
 		return "Failed to ssh to esxi host", err
@@ -81,7 +81,7 @@ func runRemoteSshCommand(esxiSSHinfo SshConnectionStruct, remoteSshCommand strin
 }
 
 //  Function to scp file to esxi host.
-func writeContentToRemoteFile(esxiSSHinfo SshConnectionStruct, content string, path string, shortCmdDesc string) (string, error) {
+func writeContentToRemoteFile(c *Config, content string, path string, shortCmdDesc string) (string, error) {
 	log.Println("[writeContentToRemoteFile] :" + shortCmdDesc)
 
 	f, _ := ioutil.TempFile("", "")
@@ -89,7 +89,7 @@ func writeContentToRemoteFile(esxiSSHinfo SshConnectionStruct, content string, p
 	f.Close()
 	defer os.Remove(f.Name())
 
-	client, session, err := connectToHost(esxiSSHinfo, 10)
+	client, session, err := connectToHost(c, 10)
 	if err != nil {
 		log.Println("[writeContentToRemoteFile] Failed err: " + err.Error())
 		return "Failed to ssh to esxi host", err

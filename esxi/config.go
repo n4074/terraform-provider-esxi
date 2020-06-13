@@ -11,6 +11,7 @@ type Config struct {
 	esxiUserName string
 	esxiPassword string
 	knownHosts   string
+	verifySSL    bool
 }
 
 func (c *Config) validateEsxiCreds() error {

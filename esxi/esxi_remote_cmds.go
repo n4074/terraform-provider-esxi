@@ -19,14 +19,14 @@ func connectToHost(c *Config, attempt int) (*ssh.Client, *ssh.Session, error) {
 		User: c.esxiUserName,
 		Auth: []ssh.AuthMethod{
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
-					// Reply password to all questions
-					answers := make([]string, len(questions))
-					for i, _ := range answers {
-						answers[i] = c.esxiPassword
-					}
+				// Reply password to all questions
+				answers := make([]string, len(questions))
+				for i := range answers {
+					answers[i] = c.esxiPassword
+				}
 
-					return answers, nil
-				}),
+				return answers, nil
+			}),
 		},
 	}
 

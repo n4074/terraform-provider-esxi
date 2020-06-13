@@ -1,13 +1,13 @@
 package esxi
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
-	"bufio"
 	//"regexp"
 	"runtime"
 	"strconv"
@@ -219,20 +219,22 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 		//password := url.QueryEscape(c.esxiPassword)
 		dst_path := fmt.Sprintf("vi://%s@%s/%s", c.esxiUserName, c.esxiHostName, resource_pool_name)
 
-	    params := []string{
+		params := []string{
 			"--acceptAllEulas",
 			"--machineOutput",
-            "--noSSLVerify",
 			"--X:useMacNaming=false",
 			"--overwrite",
 			"-dm=" + boot_disk_type,
-            "-ds=" + disk_store,
-            "--name=" + guest_name,
+			"-ds=" + disk_store,
+			"--name=" + guest_name,
 		}
-         	
-	//	net_param := ""
+
+		if !c.verifySSL {
+			params = append(params, "--noSSLVerify")
+		}
+
 		if (strings.HasSuffix(src_path, ".ova") || strings.HasSuffix(src_path, ".ovf")) && virtual_networks[0][0] != "" {
-			params = append(params, "--network='" + virtual_networks[0][0] + "'")
+			params = append(params, "--network='"+virtual_networks[0][0]+"'")
 		}
 
 		if (len(ovf_properties) > 0) && (strings.HasSuffix(src_path, ".ova") || strings.HasSuffix(src_path, ".ovf")) {
@@ -269,7 +271,7 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 		if err != nil {
 			return "", fmt.Errorf("There was an ovftool Error: could not create ovftool combined output pipe\n", err.Error())
 		}
-		
+
 		go func() {
 			scanner := bufio.NewScanner(cmdout)
 			for scanner.Scan() {
